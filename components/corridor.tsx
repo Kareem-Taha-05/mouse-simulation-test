@@ -3,6 +3,7 @@
 import { RigidBody } from "@react-three/rapier"
 import { useTexture } from "@react-three/drei"
 import * as THREE from "three"
+import { useMemo } from "react"
 
 interface CorridorProps {
   isMotivated: boolean
@@ -13,18 +14,28 @@ export function Corridor({ isMotivated, leafSide }: CorridorProps) {
   const corridorLength = 40
   const wallHeight = 6
 
-  // 1. Load Textures
-  const leafTexture = useTexture("/leaf.jpg")
-  const circleTexture = useTexture("/circles.png")
+  // 1. Load the "Master" Textures
+  const leafMaster = useTexture("/leaf.jpg")
+  const circleMaster = useTexture("/circles.png")
 
-  // Configure repeating
-  leafTexture.wrapS = leafTexture.wrapT = THREE.RepeatWrapping
-  leafTexture.repeat.set(4, 1)
-  circleTexture.wrapS = circleTexture.wrapT = THREE.RepeatWrapping
-  circleTexture.repeat.set(4, 1)
+  // 2. CLONE them so we can change settings without breaking the Maze
+  const leafTexture = useMemo(() => {
+    const t = leafMaster.clone()
+    t.wrapS = t.wrapT = THREE.RepeatWrapping
+    t.repeat.set(10, 2) // Repeat 10x horizontally, 2x vertically
+    t.needsUpdate = true
+    return t
+  }, [leafMaster])
 
-  // 2. Decide Textures based on randomization
-  // If leafSide is 'left', Left Wall gets Leaf. Otherwise Circle.
+  const circleTexture = useMemo(() => {
+    const t = circleMaster.clone()
+    t.wrapS = t.wrapT = THREE.RepeatWrapping
+    t.repeat.set(10, 2)
+    t.needsUpdate = true
+    return t
+  }, [circleMaster])
+
+  // Decide Textures
   const leftMaterialMap = leafSide === "left" ? leafTexture : circleTexture
   const rightMaterialMap = leafSide === "right" ? leafTexture : circleTexture
   
@@ -33,7 +44,6 @@ export function Corridor({ isMotivated, leafSide }: CorridorProps) {
   return (
     <group>
       {/* --- FLOOR --- */}
-      {/* Wide floor to cover both paths */}
       <RigidBody type="fixed" colliders="cuboid" friction={1}>
         <mesh receiveShadow position={[0, -0.5, -corridorLength / 2]}>
           <boxGeometry args={[16, 1, corridorLength]} />
@@ -41,16 +51,13 @@ export function Corridor({ isMotivated, leafSide }: CorridorProps) {
         </mesh>
       </RigidBody>
 
-
       {/* --- THE CENTRAL DIVIDER --- */}
-      {/* Splits the room into two tunnels starting at z = -5 */}
       <RigidBody type="fixed" colliders="cuboid">
         <mesh position={[0, wallHeight / 2, -22]} castShadow>
           <boxGeometry args={[1, wallHeight, 35]} />
           <meshStandardMaterial color="#333333" />
         </mesh>
       </RigidBody>
-
 
       {/* --- LEFT CORRIDOR OUTER WALL --- */}
       <RigidBody type="fixed" colliders="cuboid">
@@ -68,8 +75,7 @@ export function Corridor({ isMotivated, leafSide }: CorridorProps) {
         </mesh>
       </RigidBody>
 
-
-      {/* --- VISUAL REWARD MARKERS (The glowing orbs) --- */}
+      {/* --- VISUAL REWARD MARKERS --- */}
       {/* Left Goal */}
       <mesh position={[-3, 2, -corridorLength + 2]}>
         <sphereGeometry args={[0.5]} />
@@ -90,7 +96,7 @@ export function Corridor({ isMotivated, leafSide }: CorridorProps) {
         />
       </mesh>
 
-      {/* Back Wall (End of maze) */}
+      {/* Back Wall */}
       <RigidBody type="fixed" colliders="cuboid">
         <mesh position={[0, wallHeight / 2, -corridorLength]}>
           <boxGeometry args={[16, wallHeight, 1]} />

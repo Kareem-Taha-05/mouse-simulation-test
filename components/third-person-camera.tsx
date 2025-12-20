@@ -5,6 +5,7 @@ import { useRef, useEffect } from "react"
 import { useFrame, useThree } from "@react-three/fiber"
 import type { RapierRigidBody } from "@react-three/rapier"
 import * as THREE from "three"
+import { mobileControls } from "@/lib/mobile-input"
 
 interface ThirdPersonCameraProps {
   target: React.RefObject<RapierRigidBody | null>
@@ -15,9 +16,9 @@ export function ThirdPersonCamera({ target }: ThirdPersonCameraProps) {
   
   // Camera Orbit State
   const cameraState = useRef({
-    distance: 8,       // How far back the camera is
-    theta: Math.PI,    // Horizontal angle (Starts behind player)
-    phi: Math.PI / 4,  // Vertical angle (Starts at 45 degrees)
+    distance: 8,       
+    theta: 0,          // Starts BEHIND player
+    phi: Math.PI / 4,  // 45 degrees up
   })
 
   const currentPosition = useRef(new THREE.Vector3())
@@ -28,17 +29,14 @@ export function ThirdPersonCamera({ target }: ThirdPersonCameraProps) {
     const onMouseMove = (e: MouseEvent) => {
       // Only rotate if pointer is locked (user clicked the screen)
       if (document.pointerLockElement === gl.domElement) {
-        // Horizontal Rotation (Yaw)
         cameraState.current.theta -= e.movementX * 0.003
         
-        // Vertical Rotation (Pitch) - with clamping so you don't flip over
         const nextPhi = cameraState.current.phi - (e.movementY * 0.003)
-        // Limit: Don't go below ground (0.1) or too high up (1.5)
+        // Clamp to prevent flipping
         cameraState.current.phi = Math.max(0.1, Math.min(Math.PI / 2 - 0.2, nextPhi))
       }
     }
 
-    // Click to capture mouse
     const onClick = () => {
       if (document.pointerLockElement !== gl.domElement) {
         gl.domElement.requestPointerLock()
@@ -57,12 +55,18 @@ export function ThirdPersonCamera({ target }: ThirdPersonCameraProps) {
   useFrame((state, delta) => {
     if (!target.current) return
 
-    const targetPosition = target.current.translation()
+    // --- APPLY MOBILE LOOK ---
+    if (mobileControls.look.x !== 0 || mobileControls.look.y !== 0) {
+        cameraState.current.theta -= mobileControls.look.x * 2 
+        const nextPhi = cameraState.current.phi - (mobileControls.look.y * 2)
+        cameraState.current.phi = Math.max(0.1, Math.min(Math.PI / 2 - 0.2, nextPhi))
+        
+        // Reset delta
+        mobileControls.look.set(0, 0)
+    }
 
-    // 1. Calculate Orbit Position using Spherical Coordinates
-    // x = r * sin(phi) * sin(theta)
-    // y = r * cos(phi)
-    // z = r * sin(phi) * cos(theta)
+    // --- ORBIT MATH ---
+    const targetPosition = target.current.translation()
     const { distance, theta, phi } = cameraState.current
     
     const offsetX = distance * Math.sin(phi) * Math.sin(theta)
@@ -75,11 +79,10 @@ export function ThirdPersonCamera({ target }: ThirdPersonCameraProps) {
       targetPosition.z + offsetZ
     )
 
-    // 2. Smoothly Move Camera
-    currentPosition.current.lerp(idealPosition, 5 * delta) // Snappier follow
+    currentPosition.current.lerp(idealPosition, 5 * delta)
     camera.position.copy(currentPosition.current)
 
-    // 3. Look at Player (offset slightly up so we look at head/body not feet)
+    // Look slightly above the player center
     const lookAtTarget = new THREE.Vector3(
       targetPosition.x, 
       targetPosition.y + 0.5, 
